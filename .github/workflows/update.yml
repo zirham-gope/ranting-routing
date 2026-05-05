@@ -1,0 +1,30 @@
+name: Auto Update BGP Routing
+on:
+  schedule:
+    - cron: '0 19 * * *' # Berjalan setiap jam 02:00 WIB (19:00 UTC)
+  workflow_dispatch: # Mengizinkan tombol klik manual
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Memberi izin bot untuk menyimpan file
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+
+      - name: Jalankan Generator PHP
+        run: php generator.php
+
+      - name: Commit dan Push Hasil RSC
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add *.rsc
+          git commit -m "Auto Update BGP Lists" || echo "Tidak ada perubahan IP"
+          git push
