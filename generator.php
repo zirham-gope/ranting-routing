@@ -1,5 +1,5 @@
 <?php
-echo "Memulai proses fetch ASN...\n";
+echo "Memulai proses fetch ASN menggunakan API RIPE...\n";
 
 // Membagi menjadi 2 kelompok file untuk MikroTik
 $targets = [
@@ -13,10 +13,10 @@ $targets = [
     ]
 ];
 
-// KONFIGURASI HEADER (Sangat Penting agar tidak diblokir BGPView)
+// Context sederhana untuk request
 $options = [
     "http" => [
-        "header" => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\n"
+        "header" => "User-Agent: RantingID-Bot/1.0\r\n"
     ]
 ];
 $context = stream_context_create($options);
@@ -26,19 +26,23 @@ foreach ($targets as $file => $data) {
     $output .= "/ip firewall address-list remove [find list=" . $data['list_name'] . "] skip-empty=yes\n";
     
     foreach ($data['asn'] as $asn) {
-        $url = "https://api.bgpview.io/asn/{$asn}/prefixes";
+        // Menggunakan Endpoint API RIPE Stat (Sangat kebal blokir)
+        $url = "https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS{$asn}";
         
-        // Gunakan context agar API mengira ini browser asli
         $response = @file_get_contents($url, false, $context);
         
         if ($response) {
             $json = json_decode($response, true);
-            if (isset($json['data']['ipv4_prefixes'])) {
+            if (isset($json['data']['prefixes'])) {
                 $count = 0;
-                foreach ($json['data']['ipv4_prefixes'] as $prefix) {
-                    $ip = $prefix['prefix'];
-                    $output .= "add list={$data['list_name']} address={$ip}\n";
-                    $count++;
+                foreach ($json['data']['prefixes'] as $prefix_data) {
+                    $ip = $prefix_data['prefix'];
+                    
+                    // Filter: Pastikan hanya mengambil IPv4 (mengabaikan IPv6 jika ada)
+                    if (strpos($ip, ':') === false) {
+                        $output .= "add list={$data['list_name']} address={$ip}\n";
+                        $count++;
+                    }
                 }
                 echo "ASN {$asn} sukses didapat: {$count} subnet IP.\n";
             }
@@ -46,7 +50,7 @@ foreach ($targets as $file => $data) {
             echo "GAGAL mengambil data untuk ASN {$asn}!\n";
         }
         
-        // Jeda 1 detik agar tidak diblokir karena terlalu cepat (Rate Limit)
+        // Jeda 1 detik agar aman
         sleep(1);
     }
     
